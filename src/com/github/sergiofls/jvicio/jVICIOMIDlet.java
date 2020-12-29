@@ -10,8 +10,11 @@ public class jVICIOMIDlet extends MIDlet {
 	private short someByte = (short)65535;
 	protected void startApp() {
 		VIC8P cpu = new VIC8P();
-		cpu.step();
-		cpu.step();
+		try {
+			while (!cpu.halted) cpu.step();
+		} catch (Exception ex) {
+			ex.printStackTrace();
+		}
 		System.out.println(cpu.memory[0xCAFE]&0xFF);
 		Display display = Display.getDisplay(this);
 		
