@@ -21,22 +21,26 @@ public class VIC8P {
 	private boolean zeroFlag = false;
 	private boolean carryFlag = false;
 	
-	private short programCounter = 0;
-	private short stackPointer = 0;
+	private char programCounter = 0;
+	private char stackPointer = 0;
 	private byte[] registers = new byte[7];
 	
 	public boolean halted = false;
 	
 	public VIC8P() {
-		memory[0] = (byte)0x40;
-		memory[1] = (byte)0xC8;
-		
-		registers[REGISTER_H] = (byte)0xCA;
-		registers[REGISTER_L] = (byte)0xFE;
+		System.out.println("New CPU created!");
 	}
 	
 	private int unsignedByte(byte number) {
 		return number&0xFF;
+	}
+	
+	private byte getHigh(int u2) {
+		return (byte)(u2 >> 8);
+	}
+	
+	private byte getLow(int u2) {
+		return (byte)(u2 & 0xFF);
 	}
 	
 	private int mergeBytes(byte high, byte low) {
@@ -48,6 +52,43 @@ public class VIC8P {
 		if (register1 > 7 || register2 > 7) System.err.println("movRtoR params overflow");
 		
 		registers[register1] = registers[register2];
+	}
+	
+	// MOV R, NN
+	private void movRtoVal(int register, int value) {
+		registers[register] = (byte)value;
+	}
+	
+	// MOV R, (NNNN)
+	private void movRtoAddr(int register, int address) {
+		registers[register] = memory[address];
+	}
+	
+	// MOV RR, NNNN
+	private void movRRtoValVal(int register, int value) {
+		int highVal = getHigh(value);
+		int lowVal = getLow(value);
+		
+		switch (register) {
+			case 0:	// HL
+				movRtoVal(REGISTER_H, highVal);
+				movRtoVal(REGISTER_L, lowVal);
+				break;
+			case 1:	// BC
+				movRtoVal(REGISTER_B, highVal);
+				movRtoVal(REGISTER_C, lowVal);
+				break;
+			case 2:	// DE
+				movRtoVal(REGISTER_D, highVal);
+				movRtoVal(REGISTER_E, lowVal);
+				break;
+		}
+	}
+	
+	// CP
+	private void compare(int value) {
+		zeroFlag = registers[REGISTER_A] == value;
+		carryFlag = registers[REGISTER_A] < value;
 	}
 	
 	// MOV (NNNN), R
@@ -157,6 +198,48 @@ public class VIC8P {
 				case 0x40:	// MOV (HL), H
 				case 0x41:	// MOV (HL), L
 					movAddrToR(mergeBytes(registers[REGISTER_H], registers[REGISTER_L]), unsignedByte(opcode)-0x3B);
+					break;
+				case 0x42:	// MOV A, NN
+				case 0x43:	// MOV B, NN
+				case 0x44:	// MOV C, NN
+				case 0x45:	// MOV D, NN
+				case 0x46:	// MOV E, NN
+				case 0x47:	// MOV H, NN
+				case 0x48:	// MOV L, NN
+					movRtoVal(unsignedByte(opcode)-0x42, memory[programCounter++]);
+					break;
+				case 0x55:	// MOV A, (DE)
+					movRtoAddr(REGISTER_A, mergeBytes(registers[REGISTER_D], registers[REGISTER_E]));
+					break;
+				case 0x59:	// MOV (NNNN), A
+					byte highMovNNNN = (byte)memory[programCounter++];
+					byte lowMovNNNN = (byte)memory[programCounter++];
+					
+					movAddrToR(mergeBytes(highMovNNNN, lowMovNNNN), REGISTER_A);
+					break;
+				case 0x5A:	// MOV HL, NNNN
+				case 0x5B:	// MOV BC, NNNN
+				case 0x5C:	// MOV DE, NNNN
+					byte high = (byte)memory[programCounter++];
+					byte low = (byte)memory[programCounter++];
+					
+					movRRtoValVal(opcode-0x5A, mergeBytes(high, low));
+					break;
+				case 0xB4:	// CP A
+				case 0xB5:	// CP B
+				case 0xB6:	// CP C
+				case 0xB7:	// CP D
+				case 0xB8:	// CP E
+				case 0xB9:	// CP H
+				case 0xBA:	// CP L
+					System.out.println("compare");
+					compare(unsignedByte(registers[unsignedByte(opcode)-0xB4]));
+					break;
+				case 0xBD:	// JP NNNN
+					byte highJP = (byte)memory[programCounter++];
+					byte lowJP = (byte)memory[programCounter++];
+					
+					programCounter = (char)mergeBytes(highJP, lowJP);
 					break;
 				case 0xC8:	// DUMPR
 					dumpRegisters();
